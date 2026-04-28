@@ -48,7 +48,7 @@ def to_paris_time(utc_string):
 
     paris_dt = dt.astimezone(paris)
 
-    return paris_dt.strftime('%H:%M')
+    return paris_dt.strftime('%Y-%m-%d %H:%M:%S')
 
 app.jinja_env.filters['paris_time'] = to_paris_time
 
