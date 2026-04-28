@@ -52,7 +52,7 @@
                         {{ msg.sender_name if msg.sender_name else 'Utilisateur inconnu' }}
                     {% endif %}
                 </strong>
-                <small>({{ msg.created_at | paris_time }})</small>
+                <small>({{ msg.created_at }})</small>
 
                 {% if msg.sender_id == session['user_id'] %}
                     <button class="delete-btn" onclick="deleteMessage({{ msg.id }})">🗑️</button>

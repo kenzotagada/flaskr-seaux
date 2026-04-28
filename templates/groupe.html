@@ -40,7 +40,7 @@
 
             <div class="message-content">
                 <strong>{{ msg.sender_name or 'Utilisateur inconnu' }}</strong>
-                <small>({{ msg.created_at }})</small>
+                <small>({{ msg.created_at | paris_time }})</small>
                 <br>
 
                 {% if msg.content %}

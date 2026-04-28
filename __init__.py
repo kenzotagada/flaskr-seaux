@@ -5,6 +5,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 from flask import jsonify
+import pytz
 
 def get_online_status(last_seen):
     if not last_seen:
@@ -34,6 +35,22 @@ os.makedirs(IMAGE_DIR, exist_ok=True)
 UPLOAD_FOLDER = 'static/post_images'
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+def to_paris_time(utc_string):
+    if not utc_string:
+        return ""
+
+    utc = pytz.utc
+    paris = pytz.timezone('Europe/Paris')
+
+    dt = datetime.strptime(utc_string, '%Y-%m-%d %H:%M:%S')
+    dt = utc.localize(dt)
+
+    paris_dt = dt.astimezone(paris)
+
+    return paris_dt.strftime('%H:%M')
+
+app.jinja_env.filters['paris_time'] = to_paris_time
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
