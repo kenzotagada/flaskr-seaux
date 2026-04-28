@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messagerie</title>
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='messagerie.css') }}">
+</head>
+<body>
+<button class="nav-toggle" id="navToggle" aria-label="Menu">
+    <span></span><span></span><span></span>
+</button>
+<div class="nav-overlay" id="navOverlay"></div>
+<header>
+    <nav>
+        <a href="{{ url_for('profil') }}">👤 Mon profil</a>
+		<a href="{{ url_for('feed_global') }}">🌍 Fil Global</a>
+        <a href="{{ url_for('feed_abonnement') }}">📰 Fil d'abonnement</a>
+		<a href="{{ url_for('posts_likes') }}">❤️ Post Liker</a>
+        <a href="{{ url_for('messagerie') }}">📩 Messages</a>
+		<a href="{{ url_for('recherche') }}">🔎 Recherche</a>
+        <a href="{{ url_for('notifications') }}">🔔 Notifs</a>
+        <a href="{{ url_for('leaderboard') }}">🏆 Classement</a>
+        <a href="{{ url_for('carte') }}">🗺️ Carte</a>
+        <a href="{{ url_for('deconnexion') }}">Déconnexion</a>
+		<button id="themeToggle">🌙</button>
+    </nav>
+</header>
+<main>
+<h2>Messagerie</h2>
+
+<h3>Mes groupes :</h3>
+<ul>
+{% for group in groups %}
+    <li>
+        {{ group.name }} - 
+        <a href="{{ url_for('groupe_page', group_id=group.id) }}">Voir le groupe</a>
+    </li>
+{% else %}
+    <li>Pas encore de groupe</li>
+{% endfor %}
+</ul>
+
+<h3>Créer un groupe :</h3>
+<form method="POST" action="{{ url_for('creer_groupe') }}">
+    <input type="text" name="group_name" placeholder="Nom du groupe" required>
+    <button type="submit">Créer</button>
+</form>
+
+<h3>Envoyer un message :</h3>
+<ul>
+{% for user in users %}
+    <li>
+		<img src="{{ url_for('static', filename='avatars/' ~ user.avatar_url) }}" class="avatar">
+
+		<a href="{{ url_for('profil_public', user_id=user.id) }}">
+			{{ user.username }}
+		</a>
+
+		(<span style="color: {{ 'green' if user.status == 'En ligne' else 'gray' }}">
+			{{ user.status }}
+		</span>)
+
+		<a href="{{ url_for('message', receiver_id=user.id) }}">Envoyer un message</a>
+	</li>
+{% else %}
+    <li>Aucun utilisateur</li>
+{% endfor %}
+
+</ul>
+
+</main>
+<script>
+(function(){
+    const btn = document.getElementById('navToggle');
+    const header = document.querySelector('header');
+    const overlay = document.getElementById('navOverlay');
+    if(!btn) return;
+    function toggle(open){
+        btn.classList.toggle('open', open);
+        header.classList.toggle('open', open);
+        overlay.classList.toggle('visible', open);
+    }
+    btn.addEventListener('click', function(){ toggle(!header.classList.contains('open')); });
+    overlay.addEventListener('click', function(){ toggle(false); });
+    document.querySelectorAll('header nav a').forEach(function(a){
+        a.addEventListener('click', function(){ toggle(false); });
+    });
+})();
+</script>
+
+<script>
+const toggle = document.getElementById("themeToggle");
+
+if(localStorage.getItem("theme") === "dark"){
+    document.body.classList.add("dark");
+    if(toggle) toggle.textContent = "☀️";
+}
+
+if(toggle){
+    toggle.addEventListener("click", () => {
+        document.body.classList.toggle("dark");
+
+        if(document.body.classList.contains("dark")){
+            localStorage.setItem("theme", "dark");
+            toggle.textContent = "☀️";
+        } else {
+            localStorage.setItem("theme", "light");
+            toggle.textContent = "🌙";
+        }
+    });
+}
+</script>
+</body>
+</html>

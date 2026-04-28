@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messages</title>
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='message.css') }}">
+</head>
+<body>
+<button class="nav-toggle" id="navToggle" aria-label="Menu">
+    <span></span><span></span><span></span>
+</button>
+<div class="nav-overlay" id="navOverlay"></div>
+<header>
+    <nav>
+        <a href="{{ url_for('profil') }}">👤 Mon profil</a>
+		<a href="{{ url_for('feed_global') }}">🌍 Fil Global</a>
+        <a href="{{ url_for('feed_abonnement') }}">📰 Fil d'abonnement</a>
+		<a href="{{ url_for('posts_likes') }}">❤️ Post Liker</a>
+        <a href="{{ url_for('messagerie') }}">📩 Messages</a>
+		<a href="{{ url_for('recherche') }}">🔎 Recherche</a>
+        <a href="{{ url_for('notifications') }}">🔔 Notifs</a>
+        <a href="{{ url_for('leaderboard') }}">🏆 Classement</a>
+        <a href="{{ url_for('carte') }}">🗺️ Carte</a>
+        <a href="{{ url_for('deconnexion') }}">Déconnexion</a>
+		<button id="themeToggle">🌙</button>
+    </nav>
+</header>
+<main>
+<h2>
+{% if groupe %}
+    Groupe : {{ groupe.name }}
+{% else %}
+    Conversation avec {{ receiver.username }}
+{% endif %}
+</h2>
+
+<div id="chat-messages">
+    {% if messages %}
+        {% for msg in messages %}
+        <div class="chat-message {% if msg.sender_id == session['user_id'] %}me{% endif %}" data-id="{{ msg.id }}">
+            
+            <img src="{{ url_for('static', filename='avatars/' ~ (msg.sender_avatar if msg.sender_avatar else 'default.png')) }}" 
+                 alt="Avatar" class="avatar">
+
+            <div class="message-content">
+                <strong>
+                    {% if msg.sender_id == session['user_id'] %}
+                        Vous
+                    {% else %}
+                        {{ msg.sender_name if msg.sender_name else 'Utilisateur inconnu' }}
+                    {% endif %}
+                </strong>
+                <small>({{ msg.created_at }})</small>
+
+                {% if msg.sender_id == session['user_id'] %}
+                    <button class="delete-btn" onclick="deleteMessage({{ msg.id }})">🗑️</button>
+                {% endif %}
+
+                <br>
+
+                {% if msg.content %}
+                    <p>{{ msg.content | e }}</p>
+                {% endif %}
+
+                {% if msg.audio_url %}
+                    <audio controls preload="metadata">
+                        <source src="{{ url_for('serve_audio', filename=msg.audio_url) }}" type="{{ msg.audio_mime or 'audio/ogg' }}">
+                        Votre navigateur ne supporte pas la lecture audio.
+                    </audio>
+                {% endif %}
+
+                {% if msg.image_url %}
+                    <img src="{{ url_for('static', filename='images/' ~ msg.image_url) }}" 
+                         alt="Image envoyée" class="message-image">
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p>Aucun message.</p>
+    {% endif %}
+</div>
+
+<form id="chat-form" method="POST" enctype="multipart/form-data">
+    <input type="text" id="chat-input" name="content" placeholder="Écrire un message...">
+
+    <input type="file" id="chat-audio" name="audio" accept="audio/*" style="display:none">
+
+    <input type="file" id="chat-image-input" name="image" accept="image/*" style="display:none">
+
+    <img id="image-preview" src="" alt="Aperçu" style="max-width:100px; display:none; margin-left:5px;">
+
+    <label for="chat-image-input" style="cursor:pointer;">📎</label>
+    <button type="button" id="record-btn">🎤</button>
+    <button type="submit" id="send-btn">Envoyer</button>
+</form>
+
+{% if groupe %}
+<h3>Ajouter un utilisateur :</h3>
+<form method="POST" action="{{ url_for('ajouter_utilisateur_groupe', group_id=groupe.id) }}">
+    <select name="user_id" required>
+        {% for u in users_disponibles %}
+        <option value="{{ u.id }}">{{ u.username }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit">Ajouter</button>
+</form>
+
+<form method="POST" action="{{ url_for('quitter_groupe', group_id=groupe.id) }}">
+    <button type="submit" onclick="return confirm('Voulez-vous vraiment quitter ce groupe ?')">Quitter le groupe</button>
+</form>
+{% endif %}
+
+<script>
+const chatContainer = document.getElementById('chat-messages');
+const form = document.getElementById('chat-form');
+const chatInput = document.getElementById('chat-input');
+const audioInput = document.getElementById('chat-audio');
+const recordBtn = document.getElementById('record-btn');
+const sendBtn = document.getElementById('send-btn');
+
+const fileInput = document.getElementById('chat-image-input');
+const imagePreview = document.getElementById('image-preview');
+
+fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = e => {
+            imagePreview.src = e.target.result;
+            imagePreview.style.display = 'inline-block';
+        };
+        reader.readAsDataURL(file);
+    } else {
+        imagePreview.src = '';
+        imagePreview.style.display = 'none';
+    }
+});
+
+let lastMessageId = 0;
+let mediaRecorder;
+let audioChunks = [];
+
+document.querySelectorAll('.chat-message').forEach(msg => {
+    const id = parseInt(msg.dataset.id);
+    if(!isNaN(id) && id > lastMessageId) lastMessageId = id;
+});
+
+function scrollToBottom(force=false){
+    const threshold = 50;
+    const isNearBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < threshold;
+    if(force || isNearBottom){
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+}
+
+window.addEventListener('load', () => scrollToBottom(true));
+
+form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const content = chatInput.value.trim();
+    const hasAudio = audioInput.files.length > 0;
+    const hasImage = fileInput.files.length > 0;
+
+    if(!content && !hasAudio && !hasImage) return;
+
+    sendBtn.disabled = true;
+    const formData = new FormData();
+    if(content) formData.append('content', content);
+    if(hasAudio) formData.append('audio', audioInput.files[0]);
+    if(hasImage) formData.append('image', fileInput.files[0]);
+
+    try {
+        await fetch(window.location.href, { method:'POST', body: formData });
+        chatInput.value = '';
+        audioInput.value = '';
+        fileInput.value = '';
+        imagePreview.src = '';
+        imagePreview.style.display = 'none';
+        sendBtn.textContent = 'Envoyer';
+        fetchMessages();
+    } catch(err) {
+        console.error('Erreur en envoyant le message:', err);
+    } finally {
+        sendBtn.disabled = false;
+    }
+});
+
+async function fetchMessages() {
+    try {
+        const res = await fetch(window.location.href);
+        const html = await res.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html,'text/html');
+        const newMessages = doc.querySelectorAll('.chat-message');
+
+        newMessages.forEach(msg => {
+            const msgId = parseInt(msg.dataset.id);
+            if(isNaN(msgId) || msgId <= lastMessageId) return;
+            if(!chatContainer.querySelector(`.chat-message[data-id="${msgId}"]`)){
+                chatContainer.appendChild(msg.cloneNode(true));
+                lastMessageId = msgId;
+            }
+        });
+
+        scrollToBottom(false);
+    } catch(err) {
+        console.error('Erreur lors du rafraîchissement:', err);
+    }
+}
+
+setInterval(fetchMessages, 2000);
+
+if(recordBtn && navigator.mediaDevices){
+    recordBtn.addEventListener('click', async ()=>{
+        if(recordBtn.dataset.recording==='true'){
+            mediaRecorder.stop();
+            recordBtn.dataset.recording='false';
+            recordBtn.textContent='🎤';
+        } else {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+                
+                let mimeType = 'audio/webm; codecs=opus';
+                if(!MediaRecorder.isTypeSupported(mimeType)){
+                    mimeType = 'audio/webm';
+                    if(!MediaRecorder.isTypeSupported(mimeType)){
+                        alert("Votre navigateur ne supporte pas l'enregistrement audio.");
+                        return;
+                    }
+                }
+
+                mediaRecorder = new MediaRecorder(stream, { mimeType });
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = e => {
+                    if(e.data.size > 0) audioChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = ()=>{
+                    const blob = new Blob(audioChunks, { type: mimeType });
+                    if(blob.size < 1000){ alert("Enregistrement trop court !"); return; }
+                    const file = new File([blob], `audio_${Date.now()}.webm`, { type: mimeType });
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    audioInput.files = dt.files;
+                    sendBtn.textContent='Envoyer audio';
+                };
+
+                mediaRecorder.start();
+                recordBtn.dataset.recording='true';
+                recordBtn.textContent='⏹️ Stop';
+                sendBtn.textContent='Enregistrement...';
+            } catch(err) {
+                alert("Impossible d'accéder au micro ! Assurez-vous que le site utilise HTTPS.");
+                console.error(err);
+            }
+        }
+    });
+}
+
+chatInput.addEventListener('input', ()=>{
+    if(audioInput.files.length===0 && fileInput.files.length===0) sendBtn.textContent='Envoyer';
+});
+
+async function deleteMessage(msgId) {
+    if(!confirm("Voulez-vous vraiment supprimer ce message ?")) return;
+
+    try {
+        const res = await fetch(`/supprimer_message/${msgId}`, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+
+        const data = await res.json();
+
+        if(data.success){
+            const msgDiv = document.querySelector(`.chat-message[data-id="${msgId}"]`);
+            if(msgDiv) msgDiv.remove();
+        } else {
+            alert("Impossible de supprimer le message : " + (data.error || "Erreur inconnue"));
+        }
+    } catch(err){
+        console.error(err);
+        alert("Erreur lors de la suppression du message.");
+    }
+}
+</script>
+</main>
+<script>
+(function(){
+    const btn = document.getElementById('navToggle');
+    const header = document.querySelector('header');
+    const overlay = document.getElementById('navOverlay');
+    if(!btn) return;
+    function toggle(open){
+        btn.classList.toggle('open', open);
+        header.classList.toggle('open', open);
+        overlay.classList.toggle('visible', open);
+    }
+    btn.addEventListener('click', function(){ toggle(!header.classList.contains('open')); });
+    overlay.addEventListener('click', function(){ toggle(false); });
+    document.querySelectorAll('header nav a').forEach(function(a){
+        a.addEventListener('click', function(){ toggle(false); });
+    });
+})();
+</script>
+
+<script>
+const toggle = document.getElementById("themeToggle");
+
+if(localStorage.getItem("theme") === "dark"){
+    document.body.classList.add("dark");
+    if(toggle) toggle.textContent = "☀️";
+}
+
+if(toggle){
+    toggle.addEventListener("click", () => {
+        document.body.classList.toggle("dark");
+
+        if(document.body.classList.contains("dark")){
+            localStorage.setItem("theme", "dark");
+            toggle.textContent = "☀️";
+        } else {
+            localStorage.setItem("theme", "light");
+            toggle.textContent = "🌙";
+        }
+    });
+}
+</script>
+</body>
+</html>

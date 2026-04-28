@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profil de {{ user.username }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='profil_public.css') }}">
+</head>
+<body>
+<button class="nav-toggle" id="navToggle" aria-label="Menu">
+    <span></span><span></span><span></span>
+</button>
+<div class="nav-overlay" id="navOverlay"></div>
+<header>
+    <nav>
+        <a href="{{ url_for('profil') }}">👤 Mon profil</a>
+		<a href="{{ url_for('feed_global') }}">🌍 Fil Global</a>
+        <a href="{{ url_for('feed_abonnement') }}">📰 Fil d'abonnement</a>
+		<a href="{{ url_for('posts_likes') }}">❤️ Post Liker</a>
+        <a href="{{ url_for('messagerie') }}">📩 Messages</a>
+		<a href="{{ url_for('recherche') }}">🔎 Recherche</a>
+        <a href="{{ url_for('notifications') }}">🔔 Notifs</a>
+        <a href="{{ url_for('leaderboard') }}">🏆 Classement</a>
+        <a href="{{ url_for('carte') }}">🗺️ Carte</a>
+        <a href="{{ url_for('deconnexion') }}">Déconnexion</a>
+		<button id="themeToggle">🌙</button>
+    </nav>
+</header>
+
+<main>
+{% if user.banner_url %}
+    <img src="{{ url_for('static', filename='images/' ~ user.banner_url) }}" 
+         style="width:100%; height:200px; object-fit:cover;">
+{% else %}
+    <div style="width:100%; height:200px; background:#ccc;"></div>
+{% endif %}
+
+<h2>Profil de {{ user.username }}</h2>
+
+<img src="{{ url_for('static', filename='avatars/' + user.avatar_url) }}" 
+     alt="Avatar" 
+     class="profile-avatar"
+     style="border: 4px solid {{ user.border_color }};">
+
+<div class="profile-stats">
+    <a href="{{ url_for('abonnées', user_id=user.id) }}"><strong>{{ abonnes_count }}</strong> abonnés</a>
+    <a href="{{ url_for('abonnement', user_id=user.id) }}"><strong>{{ abonnements_count }}</strong> abonnements</a>
+</div>
+
+<a href="{{ url_for('message', receiver_id=user.id) }}">Envoyer un message</a>
+
+<h3>Bio :</h3>
+<p class="bio">{{ user.bio or 'Aucune bio pour le moment' }}</p>
+
+{% if session.get('user_id') and session.get('user_id') != user.id %}
+    <form method="POST" action="{{ url_for('unfollow_user' if is_following else 'follow_user', user_id=user.id) }}">
+        <button type="submit" class="follow-btn">
+            {{ 'Se désabonner' if is_following else 'Suivre' }}
+        </button>
+    </form>
+{% endif %}
+
+<p>Status : <span id="user-status-{{ user.id }}" style="color: {{ 'green' if user.status == 'En ligne' else 'gray' }};">{{ user.status }}</span></p>
+<p>Jours de connexion consécutifs : {{ user.streak_days }}</p>
+
+<script>
+function refreshStatuses() {
+    fetch("{{ url_for('get_all_user_status') }}")
+        .then(response => response.json())
+        .then(data => {
+            for (const [userId, status] of Object.entries(data)) {
+                const el = document.getElementById(`user-status-${userId}`);
+                if (el) {
+                    el.textContent = status;
+                    el.style.color = status === 'En ligne' ? 'green' : 'gray';
+                }
+            }
+        });
+}
+setInterval(refreshStatuses, 5000);
+refreshStatuses();
+</script>
+
+<h3>Publications :</h3>
+{% if posts %}
+    {% for post in posts %}
+        <div class="post">
+            <div class="post-header">
+                <img src="{{ url_for('static', filename='avatars/' ~ (post.avatar_url or 'default.png')) }}" class="avatar">
+                <b>{{ post.username }}</b>
+            </div>
+
+            {% if post.content %}
+                <p>{{ post.content | e }}</p>
+            {% endif %}
+
+            {% if post.image_url %}
+                <img src="{{ url_for('static', filename='images/' ~ post.image_url) }}" class="post-image" alt="Image du post">
+            {% endif %}
+
+            <small>Publié le {{ post.created_at }} | Likes : {{ post.likes_count }}</small>
+
+			{% if session.get('user_id') %}
+				<form class="inline" method="POST" action="{{ url_for('like_post', post_id=post.id) }}">
+					<button type="submit">❤️</button>
+				</form>
+			{% endif %}
+
+			<div style="margin-top:5px;">
+				<button class="btn-toggle" onclick="toggleComments({{ post.id }})">
+					Afficher les commentaires (<span id="comment-count-{{ post.id }}">{{ post.comments|length }}</span>)
+				</button>
+			</div>
+
+			<div id="comments-{{ post.id }}" class="comments" style="display: none;">
+				{% if post.comments %}
+					{% for comment in post.comments %}
+						<div class="comment">
+							<img src="{{ url_for('static', filename='avatars/' ~ (comment.avatar_url or 'default.png')) }}" class="avatar">
+							<div class="comment-content">
+								<a href="{{ url_for('profil_public', user_id=comment.user_id) }}">
+									<b>{{ comment.username }}</b>
+								</a>
+								: {{ comment.content | e }}
+								<small>({{ comment.created_at }})</small>
+								{% if session.get('user_id') %}
+									<form class="inline" method="POST" action="{{ url_for('like_comment', comment_id=comment.id) }}">
+										<button type="submit">❤️ {{ comment.likes_count }}</button>
+									</form>
+								{% endif %}
+							</div>
+						</div>
+					{% endfor %}
+				{% else %}
+					<p id="no-comment-{{ post.id }}">Aucun commentaire pour le moment</p>
+				{% endif %}
+
+				{% if session.get('user_id') %}
+					<form class="comment-form" data-post-id="{{ post.id }}">
+						<input type="text" name="content" placeholder="Ajouter un commentaire..." required>
+						<button type="submit">Commenter</button>
+					</form>
+				{% endif %}
+			</div>
+        </div>
+    {% endfor %}
+{% else %}
+    <p>Aucune publication pour le moment</p>
+{% endif %}
+
+<script>
+function toggleComments(postId) {
+    const commentsDiv = document.getElementById('comments-' + postId);
+    const btn = commentsDiv.previousElementSibling;
+    if(commentsDiv.style.display === 'none' || commentsDiv.style.display === '') {
+        commentsDiv.style.display = 'block';
+        btn.textContent = `Masquer les commentaires (${document.getElementById('comment-count-' + postId).textContent})`;
+    } else {
+        commentsDiv.style.display = 'none';
+        btn.textContent = `Afficher les commentaires (${document.getElementById('comment-count-' + postId).textContent})`;
+    }
+}
+
+document.querySelectorAll('.comment-form').forEach(form => {
+    form.addEventListener('submit', function(e){
+        e.preventDefault();
+        const postId = this.dataset.postId;
+        const input = this.querySelector('input[name="content"]');
+        const content = input.value.trim();
+        if(!content) return;
+
+        fetch('{{ url_for("ajouter_comment", post_id=0) }}'.replace('0', postId), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'content=' + encodeURIComponent(content)
+        }).then(res => {
+            const commentsDiv = document.getElementById('comments-' + postId);
+            const noCommentP = document.getElementById('no-comment-' + postId);
+            if(noCommentP) noCommentP.remove();
+
+            const newDiv = document.createElement('div');
+            newDiv.className = 'comment';
+            const now = new Date();
+            const formattedDate = now.getFullYear() + '-' + (now.getMonth()+1).toString().padStart(2,'0') + '-' +
+                                  now.getDate().toString().padStart(2,'0') + ' ' +
+                                  now.getHours().toString().padStart(2,'0') + ':' +
+                                  now.getMinutes().toString().padStart(2,'0') + ':' +
+                                  now.getSeconds().toString().padStart(2,'0');
+            newDiv.innerHTML = `
+                <img src="{{ url_for('static', filename='avatars/' ~ (session['avatar_url'] or 'default.png')) }}" class="avatar">
+                <div class="comment-content">
+                    <b>{{ session['username'] }}</b>: ${content} <small>(${formattedDate})</small>
+                </div>`;
+            commentsDiv.insertBefore(newDiv, this);
+
+            const countSpan = document.getElementById('comment-count-' + postId);
+            countSpan.textContent = parseInt(countSpan.textContent) + 1;
+
+            input.value = '';
+        });
+    });
+});
+</script>
+</main>
+<script>
+(function(){
+    const btn = document.getElementById('navToggle');
+    const header = document.querySelector('header');
+    const overlay = document.getElementById('navOverlay');
+    if(!btn) return;
+    function toggle(open){
+        btn.classList.toggle('open', open);
+        header.classList.toggle('open', open);
+        overlay.classList.toggle('visible', open);
+    }
+    btn.addEventListener('click', function(){ toggle(!header.classList.contains('open')); });
+    overlay.addEventListener('click', function(){ toggle(false); });
+    document.querySelectorAll('header nav a').forEach(function(a){
+        a.addEventListener('click', function(){ toggle(false); });
+    });
+})();
+</script>
+
+<script>
+const toggle = document.getElementById("themeToggle");
+
+if(localStorage.getItem("theme") === "dark"){
+    document.body.classList.add("dark");
+    if(toggle) toggle.textContent = "☀️";
+}
+
+if(toggle){
+    toggle.addEventListener("click", () => {
+        document.body.classList.toggle("dark");
+
+        if(document.body.classList.contains("dark")){
+            localStorage.setItem("theme", "dark");
+            toggle.textContent = "☀️";
+        } else {
+            localStorage.setItem("theme", "light");
+            toggle.textContent = "🌙";
+        }
+    });
+}
+</script>
+</body>
+</html>

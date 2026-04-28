@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fil d'actualités</title>
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='feed_abonnement.css') }}">
+</head>	
+<body>
+<button class="nav-toggle" id="navToggle" aria-label="Menu">
+    <span></span><span></span><span></span>
+</button>
+<div class="nav-overlay" id="navOverlay"></div>
+<header>
+    <nav>
+        <a href="{{ url_for('profil') }}">👤 Mon profil</a>
+		<a href="{{ url_for('feed_global') }}">🌍 Fil Global</a>
+        <a href="{{ url_for('feed_abonnement') }}">📰 Fil d'abonnement</a>
+		<a href="{{ url_for('posts_likes') }}">❤️ Post Liker</a>
+        <a href="{{ url_for('messagerie') }}">📩 Messages</a>
+		<a href="{{ url_for('recherche') }}">🔎 Recherche</a>
+        <a href="{{ url_for('notifications') }}">🔔 Notifs</a>
+        <a href="{{ url_for('leaderboard') }}">🏆 Classement</a>
+        <a href="{{ url_for('carte') }}">🗺️ Carte</a>
+        <a href="{{ url_for('deconnexion') }}">Déconnexion</a>
+		<button id="themeToggle">🌙</button>
+    </nav>
+</header>
+<main>
+<h2>Fil d’actualités</h2>
+
+    {% if posts %}
+		{% for post in posts %}
+			<div class="post" id="post-{{ post.id }}">
+				<div class="post-header">
+					{% if post.avatar_url %}
+						<img src="{{ url_for('static', filename='avatars/' ~ post.avatar_url) }}" class="avatar">
+					{% endif %}
+					<a href="{{ url_for('profil_public', user_id=post.user_id) }}" class="user-link">
+						<b>{{ post.username }}</b>
+					</a> : {{ post.created_at }}
+				</div>
+
+				{% if post.content %}
+					<p>{{ post.content | e }}</p>
+				{% endif %}
+
+				{# Afficher l'image seulement si elle existe #}
+				{% if post.image_url %}
+					<img src="{{ url_for('static', filename='images/' ~ post.image_url) }}" class="post-image" alt="Image du post">
+				{% endif %}
+
+				<div>Likes: {{ post.likes_count }}
+					{% if session.get('user_id') %}
+						<form class="inline" method="POST" action="{{ url_for('like_post', post_id=post.id) }}">
+							<button type="submit">❤️</button>
+						</form>
+					{% endif %}
+				</div>
+
+				<button class="btn-toggle" onclick="toggleComments({{ post.id }})">
+					Afficher les commentaires (<span id="comment-count-{{ post.id }}">{{ post.comments|length }}</span>)
+				</button>
+
+				<div class="comments" id="comments-{{ post.id }}">
+					{% for comment in post.comments %}
+						<p id="comment-{{ comment.id }}">
+							{% if comment.avatar_url %}
+								<img src="{{ url_for('static', filename='avatars/' ~ comment.avatar_url) }}" class="avatar">
+							{% endif %}
+							<a href="{{ url_for('profil_public', user_id=comment.user_id) }}" class="user-link">
+								<b>{{ comment.username }}</b>
+							</a> : {{ comment.content | e }}
+							<small>({{ comment.created_at }})</small>
+							{% if session.get('user_id') %}
+								<form class="inline" method="POST" action="{{ url_for('like_comment', comment_id=comment.id) }}">
+									<button type="submit">❤️ {{ comment.likes_count }}</button>
+								</form>
+							{% endif %}
+						</p>
+					{% else %}
+						<p id="no-comment-{{ post.id }}">Aucun commentaire</p>
+					{% endfor %}
+
+					{% if session.get('user_id') %}
+						<form class="comment-form" data-post-id="{{ post.id }}">
+							<input type="text" name="content" placeholder="Ajouter un commentaire..." required>
+							<button type="submit">Commenter</button>
+						</form>
+					{% endif %}
+				</div>
+			</div>
+		{% endfor %}
+	{% else %}
+		<p>Aucun post à afficher pour le moment.</p>
+	{% endif %}	
+
+    <script>
+        function toggleComments(postId) {
+            const commentsDiv = document.getElementById('comments-' + postId);
+            commentsDiv.style.display = (commentsDiv.style.display === 'none' || commentsDiv.style.display === '') ? 'block' : 'none';
+        }
+
+        document.querySelectorAll('.comment-form').forEach(form => {
+            form.addEventListener('submit', function(e){
+                e.preventDefault();
+                const postId = this.dataset.postId;
+                const input = this.querySelector('input[name="content"]');
+                const content = input.value.trim();
+                if(!content) return;
+
+                fetch('{{ url_for("ajouter_comment", post_id=0) }}'.replace('0', postId), {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'content=' + encodeURIComponent(content)
+                }).then(res => {
+                    const commentsDiv = document.getElementById('comments-' + postId);
+                    const noCommentP = document.getElementById('no-comment-' + postId);
+                    if(noCommentP) noCommentP.remove();
+
+                    const newP = document.createElement('p');
+                    const now = new Date();
+                    const formattedDate = now.getFullYear() + '-' + (now.getMonth()+1).toString().padStart(2,'0') + '-' + now.getDate().toString().padStart(2,'0') + ' ' +
+                                          now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0') + ':' + now.getSeconds().toString().padStart(2,'0');
+                    newP.innerHTML = '<b>{{ session["username"] }}</b> : ' + content + ' <small>(' + formattedDate + ')</small>';
+                    commentsDiv.insertBefore(newP, this);
+
+                    const countSpan = document.getElementById('comment-count-' + postId);
+                    countSpan.textContent = parseInt(countSpan.textContent) + 1;
+
+                    input.value = '';
+                });
+            });
+        });
+    </script>
+</main>
+<script>
+(function(){
+    const btn = document.getElementById('navToggle');
+    const header = document.querySelector('header');
+    const overlay = document.getElementById('navOverlay');
+    if(!btn) return;
+    function toggle(open){
+        btn.classList.toggle('open', open);
+        header.classList.toggle('open', open);
+        overlay.classList.toggle('visible', open);
+    }
+    btn.addEventListener('click', function(){ toggle(!header.classList.contains('open')); });
+    overlay.addEventListener('click', function(){ toggle(false); });
+    document.querySelectorAll('header nav a').forEach(function(a){
+        a.addEventListener('click', function(){ toggle(false); });
+    });
+})();
+</script>
+
+<script>
+const toggle = document.getElementById("themeToggle");
+
+if(localStorage.getItem("theme") === "dark"){
+    document.body.classList.add("dark");
+    if(toggle) toggle.textContent = "☀️";
+}
+
+if(toggle){
+    toggle.addEventListener("click", () => {
+        document.body.classList.toggle("dark");
+
+        if(document.body.classList.contains("dark")){
+            localStorage.setItem("theme", "dark");
+            toggle.textContent = "☀️";
+        } else {
+            localStorage.setItem("theme", "light");
+            toggle.textContent = "🌙";
+        }
+    });
+}
+</script>
+</body>
+</html>

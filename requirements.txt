@@ -1,0 +1,4 @@
+FlaFlask
+werkzeug
+mysql-connector-python
+t
