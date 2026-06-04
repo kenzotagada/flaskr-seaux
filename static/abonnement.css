@@ -12,7 +12,6 @@ body.dark h3 {
     color: #ffffff;
 }
 
-/* ⚠️ réduit le scope (évite de tout écraser inutilement) */
 body.dark p,
 body.dark span,
 body.dark small {
@@ -374,3 +373,4 @@ ul li a:hover { color: #2e6649; }
 
     .card { padding: 10px 12px; }
 }
+
